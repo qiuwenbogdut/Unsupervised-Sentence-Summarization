@@ -31,7 +31,7 @@ from elmo_lstm_forward import ElmoLstmForward
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 DEFAULT_OPTIONS_FILE = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json" # pylint: disable=line-too-long
-DEFAULT_WEIGHT_FILE = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5" # pylint: disable=line-too-long
+DEFAULT_WEIGHT_FILE = "/data_local/unsupervised_sentence_summarization/lm_lstm_models/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5" # pylint: disable=line-too-long
 DEFAULT_BATCH_SIZE = 64
 
 
@@ -144,7 +144,7 @@ class ElmoEmbedderForward(torch.nn.Module):
                 type_representation = token_embedding['token_embedding']
         else:
             character_ids = batch_to_ids(batch)           # size (batch_size, max_timesteps, 50)
-            if self.cuda_device >= 0:
+            if self.cuda_device!='cpu' and self.cuda_device >= 0:
                 character_ids = character_ids.cuda(device=self.cuda_device)
             token_embedding = self._token_embedder(character_ids, add_bos, add_eos)
             mask = token_embedding['mask']

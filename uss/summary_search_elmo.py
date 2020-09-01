@@ -77,7 +77,7 @@ def gensummary_elmo(template_vec,
         - beam (beam_search.Beam): 'Beam' object, recording all the generated sequences.
         
     """
-    device = 'cpu' if devid == -1 else f'cuda:{devid}'
+    device = 'cpu' if devid == -1 else 'cuda:'+str(devid)
 
     # Beam Search: initialization
     if begineos:
@@ -106,7 +106,7 @@ def gensummary_elmo(template_vec,
 
     # run beam search, until all sentences hit <EOS> or max_step reached
     for s in range(max_step):
-        print(f'beam step {s + 1} ' + '-' * 50 + '\n')
+        print('beam step'+str(s+1) + '-' * 50 + '\n')
         beam.beamstep(beam_width,
                       beam.combscoreK,
                       template_vec=template_vec,
@@ -148,6 +148,7 @@ def sortsummary(beam, beta=0):
     sim_scores = []
     lm_scores = []
 
+    #todo 根据beam search的结果得到计算得分，匹配得分语言模型得分。
     for ks in beam.endbus:
         sent, rebeam = beam.retrieve(ks[0] + 1, ks[1])
         score_avg = ks[2] / (ks[1] ** beta)
@@ -195,7 +196,7 @@ def fixlensummary(beam, length=-1):
 devid = 0
 
 ##### for English giga words
-arttxtpath = './data/Giga-sum/input_unk_250.txt'
+# arttxtpath = './data/Giga-sum/input_unk_250.txt'
 # arttxtpath = './data/Giga-sum/input_unk_251-500.txt'
 # arttxtpath = './data/Giga-sum/input_unk_501-750.txt'
 # arttxtpath = './data/Giga-sum/input_unk_751-1000.txt'
@@ -216,14 +217,14 @@ savedir = './results_elmo_giga/'
 '''
 
 ##### for Google sentence compression dataset
-arttxtpath = '/n/rush_lab/users/jzhou/sentence-compression/dataclean/eval_src_1000_unk.txt'
+arttxtpath = '/data_local/unsupervised_sentence_summarization/data/sentence_compression/eval_src_1000_unk.txt'
 
-vocab_path = './lm_lstm_models/sentence_compression/vocabsctgt.pkl'
-modelclass_path = './lm_lstm'
-model_path = './lm_lstm_models/sentence_compression/sctgt_LSTM_1024_untied.pth'
-closeword = './voctbls/vocabsctgtCloseWord'
-closeword_lmemb = './voctbls/vocabsctgtCloseWord'
-savedir = './results_elmo_sc/'
+vocab_path = '/data_local/unsupervised_sentence_summarization/lm_lstm_models/sentence_compression/vocabsctgt.pkl'
+modelclass_path = '/data_local/unsupervised_sentence_summarization/lm_lstm'
+model_path = '/data_local/unsupervised_sentence_summarization/lm_lstm_models/sentence_compression/sctgt_LSTM_1024_untied.pth'
+closeword = '/data_local/unsupervised_sentence_summarization/voctbls/vocabsctgtCloseWord'
+closeword_lmemb = '/data_local/unsupervised_sentence_summarization/voctbls/vocabsctgtCloseWord'
+savedir = '/data_local/unsupervised_sentence_summarization/results_elmo_sc/'
 
 '''
 arttxtpath = '/n/rush_lab/users/jzhou/sentence-compression/dataclean/eval_src_1000_unk.txt'
@@ -247,7 +248,7 @@ beam_width_start = 10
 renorm = False
 cluster = True
 temperature = 1
-elmo_layer = 'avg'
+elmo_layer = 'cat'
 alpha = 0.1
 alpha_start = alpha
 stopbyLMeos = False
@@ -256,8 +257,8 @@ beta = 0.0
 
 # find word list
 numwords = 6
-numwords_outembed = -1
-numwords_freq = 500
+numwords_outembed = 10
+numwords_freq = 300
 
 # if fix generation length
 fixedlen = False
@@ -365,22 +366,23 @@ if __name__ == '__main__':
     genlen = list(map(int, args.genlen.split(',')))  # including the starting '<eos>' token
     # and can include the ending '<eos>' token as well (if not 'stobbyLMeos')
 
-    ##### read in the article/source sentences to be summarized
-    g = open(arttxtpath, 'r')
+    ##### read in the article/source sentences to be summarized todo 加载原始句子进行处理，
+    g = open(arttxtpath, 'r',encoding='utf8')
     sents = [line.strip() for line in g if line.strip()]
     g.close()
     nsents = len(sents)
 
-    ##### load the ELMo forward embedder class
+    ##### load the ELMo forward embedder class todo 加载elmo表征模块
     ee = ElmoEmbedderForward(cuda_device=devid)
 
-    ##### load vocabulary and the pre-trained language model
-    vocab = pickle.load(open(vocab_path, 'rb'))
+    ##### load vocabulary and the pre-trained language model todo 加载词表和
+    with open(vocab_path, 'rb') as fs:
+        vocab = pickle.load(fs)
 
     if modelclass_path not in sys.path:
         sys.path.insert(1, modelclass_path)  # this is for torch.load to load the entire model
         # the model class file must be included in the search path
-    LMModel = torch.load(model_path, map_location=torch.device(device))
+    LMModel = torch.load(model_path, map_location=torch.device(device)) #todo 预训练好的语言模型
     embedmatrix = LMModel.proj.weight
 
     ##### check if the close_tables exist already; if not, generate
@@ -396,7 +398,7 @@ if __name__ == '__main__':
     if not os.path.exists(closewordind_outembed_path):
         values, indices = findclosewords_vocab(vocab, embedmatrix, numwords=500)
         # save results
-        os.makedirs(os.path.dirname(closewordind_outembed_path_path), exist_ok=True)
+        os.makedirs(os.path.dirname(closewordind_outembed_path), exist_ok=True)
         pickle.dump(values, open(closewordsim_outembed_path, 'wb'))
         pickle.dump(indices, open(closewordind_outembed_path, 'wb'))
 
@@ -421,21 +423,21 @@ if __name__ == '__main__':
     smrypath += f'_eosavg{int(eosavgemb)}' + f'_n{numwords}'
 
     if numwords_outembed != numwords:
-        smrypath += f'_ns{numwords_outembed}'
+        smrypath += '_ns'+str(numwords_outembed)
     if numwords_freq != 500:
-        smrypath += f'_nf{numwords_freq}'
+        smrypath += '_nf'+str(numwords_freq)
     if beam_width != 10:
-        smrypath += f'_K{beam_width}'
+        smrypath += '_K'+str(beam_width)
     if stopbyLMeos:
-        smrypath += f'_soleLMeos'
+        smrypath += '_soleLMeos'
 
     if alpha_start != alpha:
-        smrypath += f'_as{alpha_start}'
+        smrypath += '_as'+(alpha_start)
     if fixedlen:
         genlen = sorted(genlen)
-        smrypath_list = [smrypath + f'_length{l - 1}' + f'_a{alpha}' + '_all.txt' for l in genlen]
+        smrypath_list = [smrypath + '_length'+str(l - 1) + '_a'+str(alpha) + '_all.txt' for l in genlen]
     else:
-        smrypath += f'_a{alpha}' + f'_b{beta}' + '_all.txt'
+        smrypath += '_a'+str(alpha) + '_b'+str(beta) + '_all.txt'
 
     ##### run summary generation and write to file
     if fixedlen:
@@ -446,7 +448,7 @@ if __name__ == '__main__':
         g = open(smrypath, 'w')
 
     start = time.time()
-    for ind in tqdm(range(nsents)):
+    for ind in tqdm(range(nsents)): #todo 读取测试文件 逐个逐个处理长句子
         template = sents[ind].strip('.').strip()  # remove '.' at the end
         if appendsenteos:
             template += ' <eos>'
@@ -506,7 +508,7 @@ if __name__ == '__main__':
         ### sort and write to file
         if fixedlen:
             for j in range(len(genlen) - 1, -1, -1):
-                g_list[j].write('-' * 5 + f'<{ind + 1}>' + '-' * 5 + '\n')
+                g_list[j].write('-' * 5 + '<'+str(ind + 1)+'>' + '-' * 5 + '\n')
                 g_list[j].write('\n')
                 if genlen[j] <= beam.step:
                     ssa = fixlensummary(beam, length=genlen[j])
@@ -528,7 +530,7 @@ if __name__ == '__main__':
                     os.fsync(g_list[j].fileno())
         else:
             ssa = sortsummary(beam, beta=beta)
-            g.write('-' * 5 + f'<{ind + 1}>' + '-' * 5 + '\n')
+            g.write('-' * 5 + '<'+str(ind + 1)+'>' + '-' * 5 + '\n')
             g.write('\n')
             if ssa == []:
                 g.write('\n')
@@ -552,4 +554,4 @@ if __name__ == '__main__':
         print('results saved to: %s' % (("\n" + " " * 18).join(smrypath_list)))
     else:
         g.close()
-        print(f'results saved to: {smrypath}')
+        print('results saved to: {}'.format(smrypath))
